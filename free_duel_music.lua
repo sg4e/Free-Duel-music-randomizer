@@ -64,7 +64,9 @@ local music = {
 --    ["Build Deck"] = 0x7400
 }
 
-magic_address = 0x024DC8
+local magic_address = 0x024DC8
+local frames_per_refresh = 60 * 10
+local current_frames = 0
 
 local menu_choices = {}
 for key, _ in pairs(music) do
@@ -89,13 +91,17 @@ forms.setproperty(selection, "SelectedItem", "Random")
 
 
 while true do
-    local music_track = forms.gettext(selection)
-    local music_byte = 0x7270  -- Free Duel default
-    if music_track == "Random" then
-        music_byte = get_random_music_track()
-    else
-        music_byte = music[music_track]
+    if current_frames >= frames_per_refresh then
+        current_frames = 0
+        local music_track = forms.gettext(selection)
+        local music_byte = 0x7270  -- Free Duel default
+        if music_track == "Random" then
+            music_byte = get_random_music_track()
+        else
+            music_byte = music[music_track]
+        end
+        memory.write_u16_le(magic_address, music_byte)
     end
-    memory.write_u16_le(magic_address, music_byte)
+    current_frames = current_frames + 1
     emu.frameadvance()
 end
