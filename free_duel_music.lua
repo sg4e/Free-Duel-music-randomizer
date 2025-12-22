@@ -1,3 +1,15 @@
+-- true: do not spawn the song select window
+local hide_window = false
+
+-- true: display the song title at the start of a duel
+local show_now_playing = true
+
+-- delay the song title fade out by this many frames
+local fade_delay = 90
+
+--print("Hide Window: " .. tostring(hide_window))
+--print("Show NP: " .. tostring(show_now_playing))
+
 local music = {
     ["Random"] = 0x0,
     ["Main Menu"] = 0x7000,
@@ -67,14 +79,17 @@ local music = {
 local magic_address = 0x024DC8
 local frames_per_refresh = 60 * 10
 local current_frames = 0
+local fade_frames = -math.abs(fade_delay)
 
 local menu_choices = {}
 for key, _ in pairs(music) do
     table.insert(menu_choices, key)
 end
 
+local musicByValue = {}
 local menu_values = {}
-for _, value in pairs(music) do
+for key, value in pairs(music) do
+    musicByValue[value] = key
     table.insert(menu_values, value)
 end
 
@@ -83,25 +98,51 @@ function get_random_music_track()
     return menu_values[math.random(1, #menu_values)]
 end
 
+local selection
+if not hide_window then
+    local music_form = forms.newform(320, 70, "Free Duel music")
+    selection = forms.dropdown(music_form, menu_choices, 0, 0, 300, 25)
+    forms.setproperty(selection, "SelectedItem", "Random")
+end
 
-local music_form = forms.newform(320, 70, "Free Duel music")
-local selection = forms.dropdown(music_form, menu_choices, 0, 0, 300, 25)
-forms.setproperty(selection, "SelectedItem", "Random")
-
-
+local queued = get_random_music_track()
+local to_play = queued
+--print("iQ: 0x" .. string.format("%X", queued) .. " " .. musicByValue[queued])
 
 while true do
+    local AI_LP = memory.read_u16_le(0x0EA024)
+
     if current_frames >= frames_per_refresh then
         current_frames = 0
-        local music_track = forms.gettext(selection)
-        local music_byte = 0x7270  -- Free Duel default
-        if music_track == "Random" then
-            music_byte = get_random_music_track()
-        else
-            music_byte = music[music_track]
+        local music_track = hide_window and "Random" or forms.gettext(selection)
+
+        if AI_LP == 0 then
+            -- Apply outside of duels
+            fade_frames = -math.abs(fade_delay)
+            to_play = queued
+            memory.write_u16_le(magic_address, to_play)
+        elseif AI_LP > 0 then
+            -- Roll during duels
+            if music_track == "Random" then
+                queued = get_random_music_track()
+                --print("dQ: 0x" .. string.format("%X", queued) .. " " .. musicByValue[queued])
+            else
+                queued = music[music_track]
+            end
         end
-        memory.write_u16_le(magic_address, music_byte)
     end
+
+    if show_now_playing and AI_LP > 0 and fade_frames < 255 then
+        -- In duel
+        local playing = memory.read_u16_le(magic_address)
+        fade_frames = math.min(fade_frames + 1, 255)
+        multi = fade_frames < 0 and 0 or fade_frames
+        
+        gui.drawString(1, 1, musicByValue[playing], 0xFFFFFFFF - 0x01000000 * multi)
+    else
+        gui.clearGraphics()
+    end
+
     current_frames = current_frames + 1
     emu.frameadvance()
 end
