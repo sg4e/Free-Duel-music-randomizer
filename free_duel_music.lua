@@ -1,4 +1,4 @@
--- true: do not spawn the song select window
+-- true: do not spawn the song select window, defaults to "Random"
 local hide_window = false
 
 -- true: display the song title at the start of a duel
