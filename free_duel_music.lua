@@ -136,7 +136,7 @@ while true do
         -- In duel
         local playing = memory.read_u16_le(magic_address)
         fade_frames = math.min(fade_frames + 1, 255)
-        multi = fade_frames < 0 and 0 or fade_frames
+        multi = math.max(0, fade_frames)
         
         gui.drawString(160, 1, musicByValue[playing], 0xFFFFFFFF - 0x01000000 * multi, nil,  nil,  nil,  nil, "center")
     else
