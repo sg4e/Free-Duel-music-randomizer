@@ -65,16 +65,20 @@ local music = {
 }
 
 local magic_address = 0x024DC8
-local frames_per_refresh = 60 * 10
+local frames_per_refresh = 60 * 5
 local current_frames = 0
+local fade_delay = 90  -- in frames
+local fade_frames = -math.abs(fade_delay)
 
 local menu_choices = {}
 for key, _ in pairs(music) do
     table.insert(menu_choices, key)
 end
 
+local musicByValue = {}
 local menu_values = {}
-for _, value in pairs(music) do
+for key, value in pairs(music) do
+    musicByValue[value] = key
     table.insert(menu_values, value)
 end
 
@@ -83,25 +87,52 @@ function get_random_music_track()
     return menu_values[math.random(1, #menu_values)]
 end
 
-
-local music_form = forms.newform(320, 70, "Free Duel music")
+local music_form = forms.newform(320, 80, "Free Duel music")
 local selection = forms.dropdown(music_form, menu_choices, 0, 0, 300, 25)
 forms.setproperty(selection, "SelectedItem", "Random")
+local show_now_playing = forms.checkbox(music_form, "Show song title", 0, 20)
+forms.setproperty(selection, "SelectedItem", "Random")
+forms.setproperty(show_now_playing, "Checked", true)
 
-
+local queued = get_random_music_track()
+local to_play = queued
 
 while true do
+    local AI_LP = memory.read_u16_le(0x0EA024)
+
     if current_frames >= frames_per_refresh then
         current_frames = 0
         local music_track = forms.gettext(selection)
-        local music_byte = 0x7270  -- Free Duel default
-        if music_track == "Random" then
-            music_byte = get_random_music_track()
-        else
-            music_byte = music[music_track]
+
+        if AI_LP == 0 then
+            -- Apply outside of duels
+            fade_frames = -math.abs(fade_delay)
+            to_play = queued
+            memory.write_u16_le(magic_address, to_play)
+        elseif AI_LP > 0 then
+            -- Roll during duels
+            if music_track == "Random" then
+                queued = get_random_music_track()
+            else
+                queued = music[music_track]
+            end
         end
-        memory.write_u16_le(magic_address, music_byte)
     end
+
+    if forms.setproperty(show_now_playing, "Checked") and AI_LP > 0 and fade_frames < 255 then
+        -- In duel
+        local playing = memory.read_u16_le(magic_address)
+        fade_frames = math.min(fade_frames + 1, 255)
+        multi = math.max(0, fade_frames)
+        
+        -- top center:
+        -- gui.drawString(160, 1, musicByValue[playing], 0xFFFFFFFF - 0x01000000 * multi, nil,  nil,  nil,  nil, "center")
+        -- mid center:
+        gui.drawString(160, 60, musicByValue[playing], 0xFFFFFFFF - 0x01000000 * multi, nil,  nil,  nil,  nil, "center")
+    else
+        gui.clearGraphics()
+    end
+
     current_frames = current_frames + 1
     emu.frameadvance()
 end
